@@ -2,137 +2,216 @@
 
 namespace App\Http\Controllers;
 
-use App\Entities\User;
+use App\Models\User;
+use App\Interfaces\UserRepository;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
+use App\Transformers\UserTransformer;
 
 class UsersController extends Controller
 {
     /**
-     * Create a new controller instance.
+     * Instance of UserRepository
      *
-     * @return void
+     * @var UserRepository
      */
-    public function __construct()
+    private $userRepository;
+
+    /**
+     * Instanceof UserTransformer
+     *
+     * @var UserTransformer
+     */
+    private $userTransformer;
+
+    /**
+     * Constructor
+     *
+     * @param UserRepository $userRepository
+     * @param UserTransformer $userTransformer
+     */
+    public function __construct(UserRepository $userRepository, UserTransformer $userTransformer)
     {
-		// $this->middleware('auth');
+        $this->userRepository = $userRepository;
+        $this->userTransformer = $userTransformer;
+
+        parent::__construct();
     }
 
     /**
-     * List users
-     * GET - /users
+     * Display a listing of the resource.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
      */
-    public function index() 
+    public function index(Request $request)
     {
-        $users = User::all();
-        return $this->success($users, 200);
+        $users = $this->userRepository->findBy($request->all());
+        return $this->respondWithCollection($users, $this->userTransformer);
     }
 
     /**
-     * Create user
-     * POST - /users
+     * Display the specified resource.
+     *
+     * @param $id
+     * @return \Illuminate\Http\JsonResponse|string
      */
-    public function store(Request $request) 
+    public function show($id)
     {
-        $this->validateRequest($request);
+        $user = $this->userRepository->findOne($id);
 
-        $user = new User;
-
-        $user->cpf = $request->input('cpf');
-        $user->name = $request->input('name');
-        $user->email = $request->input('email');
-        $user->password = Hash::make($request->input('password'));
-        $user->phone = $request->input('phone');
-        $user->birth = $request->input('birth');
-        $user->gender = $request->input('gender');
-        $user->notes = $request->input('notes');
-        $user->status = $request->input('status');
-        $user->permission = $request->input('permission');
-
-        $user->save();
-
-        return $this->success($user, 200);
-    }
-
-    /**
-     * View user
-     * GET - /users/:id
-     */
-    public function show($id) 
-    {
-        $user = User::find($id);
-
-        if (!$user) {
-            return $this->error('User not found', 404);
+        if (!$user instanceof User) {
+            return $this->sendNotFoundResponse("The user with id {$id} doesn't exist");
         }
 
-        return $this->success($user, 200);
+        // Authorization
+        $this->authorize('show', $user);
+
+        return $this->respondWithItem($user, $this->userTransformer);
     }
 
-
     /**
-     * Update user
-     * PUT - /users/:id
+     * Store a newly created resource in storage.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse|string
      */
-    public function update(Request $request, $id) 
+    public function store(Request $request)
     {
-        $user = User::find($id);
+        // Validation
+        $validatorResponse = $this->validateRequest($request, $this->storeRequestValidationRules($request));
 
-        if (!$user) {
-            return $this->error('User not found', 404);
+        // Send failed response if validation fails
+        if ($validatorResponse !== true) {
+            return $this->sendInvalidFieldResponse($validatorResponse);
         }
 
-        $user->cpf = $request->input('cpf');
-        $user->name = $request->input('name');
-        $user->email = $request->input('email');
-        $user->password = $request->input('password');
-        $user->phone = $request->input('phone');
-        $user->birth = $request->input('birth');
-        $user->gender = $request->input('gender');
-        $user->notes = $request->input('notes');
-        $user->status = $request->input('status');
-        $user->permission = $request->input('permission');
+        $user = $this->userRepository->save($request->all());
 
-        $user->save();
-
-        return $this->success($user, 200);
-    }
-
-
-    /**
-     * Delete user
-     * DELETE - /users/:id
-     */
-    public function destroy($id) 
-    {
-        $user = User::find($id);
-
-        if (!$user) {
-            return $this->error('User not found', 404);
+        if (!$user instanceof User) {
+            return $this->sendCustomResponse(500, 'Error occurred on creating User');
         }
 
-        $user->delete();
-
-        return response()->json('User successfully removed!');
+        return $this->setStatusCode(201)->respondWithItem($user, $this->userTransformer);
     }
 
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param Request $request
+     * @param $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function update(Request $request, $id)
+    {
+        // Validation
+        $validatorResponse = $this->validateRequest($request, $this->updateRequestValidationRules($request));
+
+        // Send failed response if validation fails
+        if ($validatorResponse !== true) {
+            return $this->sendInvalidFieldResponse($validatorResponse);
+        }
+
+        $user = $this->userRepository->findOne($id);
+
+        if (!$user instanceof User) {
+            return $this->sendNotFoundResponse("The user with id {$id} doesn't exist");
+        }
+
+        // Authorization
+        $this->authorize('update', $user);
+
+
+        $user = $this->userRepository->update($user, $request->all());
+
+        return $this->respondWithItem($user, $this->userTransformer);
+    }
 
     /**
-     * Validators
+     * Remove the specified resource from storage.
+     *
+     * @param $id
+     * @return \Illuminate\Http\JsonResponse|string
      */
-    public function validateRequest(Request $request)
+    public function destroy($id)
+    {
+        $user = $this->userRepository->findOne($id);
+
+        if (!$user instanceof User) {
+            return $this->sendNotFoundResponse("The user with id {$id} doesn't exist");
+        }
+
+        // Authorization
+        $this->authorize('destroy', $user);
+
+        $this->userRepository->delete($user);
+
+        return response()->json(null, 204);
+    }
+
+    /**
+     * Store Request Validation Rules
+     *
+     * @param Request $request
+     * @return array
+     */
+    private function storeRequestValidationRules(Request $request)
     {
         $rules = [
-            'email' => 'required|email|unique:users', 
-            'password' => 'required|min:6'
+            'email'    => 'email|required|unique:users',
+            'name'     => 'required|max:100',
+            'address'  => 'max:255',
+            'zipcode'  => 'max:10',
+            'phone'    => 'max:20',
+            'mobile'   => 'max:20',
+            'city'     => 'max:100',
+            'state'    => 'max:100',
+            'country'  => 'max:100',
+            'password' => 'min:5'
         ];
-        $this->validate($request, $rules);
+
+        $requestUser = $request->user();
+
+        // Only admin user can set admin role.
+        if ($requestUser instanceof User && $requestUser->role === User::ADMIN_ROLE) {
+            $rules['role'] = 'in:BASIC_USER,ADMIN_USER';
+        } else {
+            $rules['role'] = 'in:BASIC_USER';
+        }
+
+        return $rules;
     }
 
-    public function isAuthorized(Request $request)
+    /**
+     * Update Request validation Rules
+     *
+     * @param Request $request
+     * @return array
+     */
+    private function updateRequestValidationRules(Request $request)
     {
-		$resource = "users";
-		// $user     = User::find($this->getArgs($request)["user_id"]);
-		return $this->authorizeUser($request, $resource);
-	}
+        $userId = $request->segment(2);
+        $rules = [
+            'email'    => 'email|unique:users,email,'. $userId,
+            'name'     => 'required|max:100',
+            'address'  => 'max:255',
+            'zipcode'  => 'max:10',
+            'phone'    => 'max:20',
+            'mobile'   => 'max:20',
+            'city'     => 'max:100',
+            'state'    => 'max:100',
+            'country'  => 'max:100',
+            'password' => 'min:5'
+        ];
+
+        $requestUser = $request->user();
+
+        // Only admin user can update admin role.
+        if ($requestUser instanceof User && $requestUser->role === User::ADMIN_ROLE) {
+            $rules['role'] = 'in:BASIC_USER,ADMIN_USER';
+        } else {
+            $rules['role'] = 'in:BASIC_USER';
+        }
+
+        return $rules;
+    }
 }

@@ -48,6 +48,18 @@ $app->singleton(
     App\Console\Kernel::class
 );
 
+// load auth configurations
+$app->configure('auth');
+
+// load cors configurations
+$app->configure('cors');
+
+// load mail configurations
+$app->configure('mail');
+
+// load database configurations
+$app->configure('database');
+
 /*
 |--------------------------------------------------------------------------
 | Register Middleware
@@ -59,14 +71,18 @@ $app->singleton(
 |
 */
 
-// $app->middleware([
-//    App\Http\Middleware\ExampleMiddleware::class
-// ]);
+$app->middleware([
+    \Barryvdh\Cors\HandleCors::class,
+]);
 
 $app->routeMiddleware([
-    'auth' => App\Http\Middleware\Authenticate::class,
-    'role' => App\Http\Middleware\Role::class
+    'auth'     => App\Http\Middleware\Authenticate::class,
+    'throttle' => App\Http\Middleware\ThrottleRequests::class,
+    'scopes'   => \Laravel\Passport\Http\Middleware\CheckScopes::class,
+    'scope'    => \Laravel\Passport\Http\Middleware\CheckForAnyScope::class
 ]);
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -81,7 +97,26 @@ $app->routeMiddleware([
 
 // $app->register(App\Providers\AppServiceProvider::class);
 $app->register(App\Providers\AuthServiceProvider::class);
-// $app->register(App\Providers\EventServiceProvider::class);
+$app->register(App\Providers\EventServiceProvider::class);
+$app->register(App\Providers\RepositoriesServiceProvider::class);
+$app->register(Barryvdh\Cors\ServiceProvider::class);
+$app->register(\Illuminate\Mail\MailServiceProvider::class);
+
+// Register two Passport service providers - original one and Lumen adapter
+// @NOTE https://github.com/dusterio/lumen-passport
+
+$LaravelPassportClass = Laravel\Passport\PassportServiceProvider::class;
+$LumenPassportClass   = Dusterio\LumenPassport\PassportServiceProvider::class;
+
+if ( class_exists( $LaravelPassportClass ) && class_exists( $LumenPassportClass ) ) {
+
+    $app->register( $LaravelPassportClass );
+    $app->register( $LumenPassportClass );
+
+    // register routes
+    Dusterio\LumenPassport\LumenPassport::routes(app()->router);
+}
+
 
 /*
 |--------------------------------------------------------------------------

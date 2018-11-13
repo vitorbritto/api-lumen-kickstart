@@ -2,9 +2,11 @@
 
 namespace App\Providers;
 
-use App\User;
+use App\Models\User;
+use Laravel\Passport\Passport;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use App\Policies\UserPolicy;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -35,5 +37,19 @@ class AuthServiceProvider extends ServiceProvider
                 return User::where('api_token', $request->input('api_token'))->first();
             }
         });
+
+        Passport::tokensCan([
+            'admin' => 'Admin user scope',
+            'basic' => 'Basic user scope',
+            'users' => 'Users scope',
+            'users:list' => 'Users scope',
+            'users:read' => 'Users scope for reading records',
+            'users:write' => 'Users scope for writing records',
+            'users:create' => 'Users scope for creating records',
+            'users:delete' => 'Users scope for deleting records',
+        ]);
+
+        // Register all policies here
+        Gate::policy(User::class, UserPolicy::class);
     }
 }

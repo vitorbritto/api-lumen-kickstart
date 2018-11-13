@@ -1,42 +1,49 @@
-<?php
+<?php //app/Http/Controllers/Controller.php
 
 namespace App\Http\Controllers;
 
 use Laravel\Lumen\Routing\Controller as BaseController;
 use Illuminate\Http\Request;
-use App\User;
-use Gate;
+use League\Fractal\Manager;
 
 class Controller extends BaseController
 {
+    use ResponseTrait;
 
     /**
-     * Return a JSON response for success.
+     * Constructor
      *
-     * @param  array  $data
-     * @param  string $code
-     * @return \Illuminate\Http\JsonResponse
+     * @param Manager|null $fractal
      */
-    public function success($data, $code)
+    public function __construct(Manager $fractal = null)
     {
-        return response()->json([
-            'status' => true,
-            'data' => $data
-        ], $code);
+        $fractal = $fractal === null ? new Manager() : $fractal;
+        $this->setFractal($fractal);
     }
 
     /**
-     * Return a JSON response for error.
+     * Validate HTTP request against the rules
      *
-     * @param  array  $message
-     * @param  string $code
-     * @return \Illuminate\Http\JsonResponse
+     * @param Request $request
+     * @param array $rules
+     * @return bool|array
      */
-    public function error($message, $code)
+    protected function validateRequest(Request $request, array $rules)
     {
-        return response()->json([
-            'status' => false,
-            'message' => $message
-        ], $code);
+        // Perform Validation
+        $validator = \Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            $errorMessages = $validator->errors()->messages();
+
+            // crete error message by using key and value
+            foreach ($errorMessages as $key => $value) {
+                $errorMessages[$key] = $value[0];
+            }
+
+            return $errorMessages;
+        }
+
+        return true;
     }
 }
